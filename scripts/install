@@ -1,0 +1,5 @@
+#!/bin/sh
+# Install alpine package
+shift
+echo "Installing package(s): $@"
+apk add --no-cache $@

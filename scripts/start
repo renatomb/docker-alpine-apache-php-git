@@ -1,0 +1,6 @@
+#!/bin/sh
+# Start script
+# Generate a new ssh key if don't exists
+genkey
+# Change owner of /data to apache
+fix-permission

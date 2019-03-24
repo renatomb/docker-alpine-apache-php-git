@@ -1,0 +1,10 @@
+#!/bin/sh
+# Run HTTPD service
+# Stop in case of error
+set -e
+# Run start script
+start
+# Apache gets grumpy about PID files pre-existing
+rm -f /usr/local/apache2/logs/httpd.pid
+# Run apache in foreground
+exec httpd -DFOREGROUND

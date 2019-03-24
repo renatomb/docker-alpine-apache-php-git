@@ -1,0 +1,3 @@
+#!/bin/sh
+# Change ownership of /data to apache user
+chown apache.apache -R /data

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Show current pubkey for ssh access
+genkey
+echo "Your ssh key is:"
+cat /data/ssh/id_rsa.pub

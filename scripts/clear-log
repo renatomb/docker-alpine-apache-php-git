@@ -1,0 +1,4 @@
+#!/bin/sh
+# Clear error.log file
+echo "" > /var/log/apache2/error.log 
+echo "Your error.log is now empty."

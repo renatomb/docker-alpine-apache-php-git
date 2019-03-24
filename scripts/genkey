@@ -1,0 +1,24 @@
+#!/bin/sh
+# Generate a new ssh key if not exists
+if [ "$1" == "force" ]; then
+    rm -f /data/ssh/*
+    rm -f ~/.ssh/*
+    rm -f /root/.ssh/*
+fi
+if [ ! -f /data/ssh/id_rsa ]; then
+   echo "Generating a new ssh key..."
+   ssh-keygen -b 2048 -t rsa -f /data/ssh/id_rsa -q -N ""
+   echo -e "Host github.com\n\tStrictHostKeyChecking no\n" > /data/ssh/config
+   echo -e "Host bitbucket.org\n\tStrictHostKeyChecking no\n" >> /data/ssh/config
+fi
+if [ ! -f ~/.ssh/id_rsa ]; then
+   ME=$(whoami)
+   echo "Installing ssh key to $ME user..."
+   cp -Rf /data/ssh ~/.ssh
+   chown $ME.$ME -R ~/.ssh
+fi
+if [ "$1" == "copy" ]; then
+   echo "Replacing root's ssh key..."
+   cp -Rf /data/ssh /root/.ssh
+   chown root.root -R /root/.ssh
+fi 
