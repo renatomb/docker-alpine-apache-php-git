@@ -1,0 +1,12 @@
+#!/bin/sh
+# Initialize volume
+mkdir -p /data/ssh
+mv /etc/apache2 /data/etc
+mv /var/log/apache2 /data/log
+mv /var/www/localhost /data
+ln -s /data/etc /etc/apache2
+ln -s /data/log /var/log/apache2
+ln -s /data/ssh /var/www/.ssh
+ln -s /data/localhost /var/www/localhost
+sed -i 's#AllowOverride none#AllowOverride All#' /data/etc/httpd.conf
+sed -i 's#/var/www/#/data/#' /data/etc/httpd.conf

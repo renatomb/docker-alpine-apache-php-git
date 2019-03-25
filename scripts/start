@@ -1,5 +1,9 @@
 #!/bin/sh
 # Start script
+if [ -f /usr/local/bin/setupvol ]; then
+   /usr/local/bin/setupvol
+   rm -f /usr/local/bin/setupvol
+fi
 # Generate a new ssh key if don't exists
 genkey
 # Change owner of /data to apache
