@@ -22,11 +22,25 @@ You're developing a web-based php software and want to deploy it at your custome
    - php-phar
    - php-openssl
    - php-mysqli
-   - php7-session
+   - php-session
    - php-curl
    - php-pdo
    - php-simplexml
    - php-gd
+   - php-mbstring 
+   - php-common 
+   - php-iconv 
+   - php-xml 
+   - php-imap 
+   - php-cgi 
+   - fcgi 
+   - php-pdo_mysql 
+   - php-soap 
+   - php-posix 
+   - php-gettext 
+   - php-ldap 
+   - php-ctype 
+   - php-dom
    - git
    - openssh-client
    - openssh-keygen
@@ -130,6 +144,44 @@ This software is designed for internal (intranet) use. Some security questions m
 - httpd.conf with default config;
 
 NOTE: *As this image designed for internal use, those modifications allow you to run and update your software in an automated way. Sharing SSH key with apache also allows your software to call git directly from your PHP code.*
+
+# Docker Compose
+
+```yaml
+services:
+  db:
+    image: mariadb
+    command: --default-authentication-plugin=mysql_native_password --sql_mode="" --lower_case_table_names=1
+    restart: always
+    expose:
+     - '3306'
+    ports:
+     - 3306:3306
+    environment:
+      MYSQL_ROOT_PASSWORD: areallystrongpassword
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+      - ./mysql_import:/home/import
+    networks:
+      - websvcs
+
+  websys:
+    image: renatomb/alpine-apache-php-git:php8.3
+    ports:
+      - "80:80"
+    restart: always  
+    volumes:
+      - ./sistema/data:/data
+      - ./sistema/conf:/etc/apache2/
+    networks:
+      - websvcs      
+    depends_on:
+      - db
+
+networks:
+ websvcs:
+```
+
 
 # License
 

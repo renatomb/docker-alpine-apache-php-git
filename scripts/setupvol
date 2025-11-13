@@ -1,12 +1,43 @@
 #!/bin/sh
 # Initialize volume
-mkdir -p /data/ssh
-mv /etc/apache2 /data/etc
-mv /var/log/apache2 /data/log
-mv /var/www/localhost /data
+# Verifica se o diretorio /data/ssh existe
+if [ ! -d /data/ssh ]; then
+    echo "[+] Initializing /data/ssh directory..."
+    mkdir -p /data/ssh
+fi
+if [ ! -d /data/log ]; then
+    echo "[+] Moving /var/log/apache2 to /data/log..."
+    mv /var/log/apache2 /data/log
+fi
+if [ ! -d /data/etc ]; then
+    echo "[+] Moving /etc/apache2 to /data/etc..."
+    mv /etc/apache2 /data/etc
+fi
+if [ ! -d /data/localhost ]; then
+    echo "[+] Moving /var/www/localhost to /data/localhost..."
+    mv /var/www/localhost /data/localhost
+fi
+if [ -d /etc/apache2 ]; then
+    echo "[-] Removing /etc/apache2..."
+    rm -rf /etc/apache2
+fi
+if [ -d /var/log/apache2 ]; then
+    echo "[-] Removing /var/log/apache2..."
+    rm -rf /var/log/apache2
+fi
+if [ -d /var/www/.ssh ]; then
+    echo "[-] Removing /var/www/.ssh..."
+    rm -rf /var/www/.ssh
+fi
+if [ -d /var/www/localhost ]; then
+    echo "[-] Removing /var/www/localhost..."
+    rm -rf /var/www/localhost
+fi
+echo "[+] Creating symbolic links..."
 ln -s /data/etc /etc/apache2
 ln -s /data/log /var/log/apache2
 ln -s /data/ssh /var/www/.ssh
 ln -s /data/localhost /var/www/localhost
+echo "[+] Adjusting Apache configuration..."
 sed -i 's#AllowOverride none#AllowOverride All#' /data/etc/httpd.conf
 sed -i 's#/var/www/#/data/#' /data/etc/httpd.conf
