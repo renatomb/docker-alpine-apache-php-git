@@ -1,151 +1,124 @@
 # docker-alpine-apache-php-git
 
-A lightweight infrastructure to run php web apps in a container. Based on  distro [Alpine Linux][alpine] projected to be a small size package to distribute your software.
+Alpine-based image that ships Apache httpd, PHP (with a curated set of common modules) and Git so you can drop a PHP application in a container and immediately clone, serve, and update it. The image was created with “ship-it-to-the-client” scenarios in mind, where you need a reproducible stack that remains lightweight and easy to automate.
 
-## Use case
+## Why this image?
 
-You're developing a web-based php software and want to deploy it at your customer without too much infrastructure setup. Just deploy what you need.
+- **Tiny and fast:** Alpine + Apache + PHP with no-frills defaults keeps the image small and boot times short.
+- **Batteries included:** Pre-installs the most-used PHP extensions, Git, and OpenSSH tooling so you can `git clone` private repos on first boot.
+- **Stateful when you need it:** Everything important lives under `/data`, making it trivial to persist sources, logs, and config on the host.
+- **Helper tooling:** Small shell helpers (e.g., `genkey`, `fix-permission`, `error-log`) handle repetitive setup tasks inside the container.
+- **Secure-by-context:** Intended for intranet deployments where you control the environment and need automation more than hardened defaults.
 
-### How to deploy?
+## Table of contents
 
-- Install [docker]
-- Get [image] on docker hub
-- Clone your software from git
-- Or just fork it and adapt to your needs
+1. [Prerequisites](#prerequisites)
+2. [Quick start](#quick-start)
+3. [Volume layout](#volume-layout)
+4. [Helper commands](#helper-commands)
+5. [Working with Git](#working-with-git)
+6. [Installing extra packages](#installing-extra-packages)
+7. [Docker Compose example](#docker-compose-example)
+8. [Security considerations](#security-considerations)
+9. [License](#license)
+10. [Credits](#credits)
 
-### How does it works?
-- It will install:
-   - php-apache2
-   - curl
-   - php-cli
-   - php-json
-   - php-phar
-   - php-openssl
-   - php-mysqli
-   - php-session
-   - php-curl
-   - php-pdo
-   - php-simplexml
-   - php-gd
-   - php-mbstring 
-   - php-common 
-   - php-iconv 
-   - php-xml 
-   - php-imap 
-   - php-cgi 
-   - fcgi 
-   - php-pdo_mysql 
-   - php-soap 
-   - php-posix 
-   - php-gettext 
-   - php-ldap 
-   - php-ctype 
-   - php-dom
-   - git
-   - openssh-client
-   - openssh-keygen
-   - need additional package? check-out [Alpine Packages][alpine-pkg]
-- A ssh key will be generated so you can clone private git repos
-- Clone your desired git repo
-- You're up and running
+## Prerequisites
 
-### Data
-All relevant data will be stored on `/data` path. This allows you to persist your source code on host machine, or even keep your source-code inside containers without risk of unwanted access and modification.
+- [Docker] 20.10+ (or an equivalent compatible engine).
+- Ability to reach [Docker Hub image][image] `renatomb/alpine-apache-php-git`.
+- Optional: a Git repository (public or private) containing the PHP application you want to serve.
 
-# Usage
-In all examples container will be refered as **mywebapp**, change to your desired name or refer to it using docker container ID, port will be refered as **8888**, change to whatever you need.
+## Quick start
 
-## Start
-If you want to keep your source-code inside the container and out of sight of your user, execute:
-```
+Pick a container name (`mywebapp`) and host port (`8888`) then launch the image. Two common workflows are shown below.
+
+### Keep the code inside the container
+
+```bash
 docker run -d -p 8888:80 --name mywebapp renatomb/alpine-apache-php-git
 ```
-If you want to persist your data outside docker, execute:
-```
-docker run -v /local/path:/data -d -p 8888:80 --name mywebapp renatomb/alpine-apache-php-git
-```
-Remember to change `/local/path` to your local path. If you want to save on current directory just replace it by `$(pwd)`.
 
-## SSH Public Key
-Public key will be necessary for clonning private git repositories. When you first start your container it will be automatically generated.
+### Persist the `/data` volume on the host
 
-If you persist your data outside your container, your keys will be available in `/local/path/ssh` path, replace it if you need.
-
-### Viewing your public key
-If you're clonning private git repositories, you'll need to allow your container to access them, to do this you'll need to view your public ssh key. Just execute:
+```bash
+docker run -d \
+  -p 8888:80 \
+  -v "$(pwd)/data:/data" \
+  --name mywebapp \
+  renatomb/alpine-apache-php-git
 ```
+
+Mounting `/data` lets you edit sources, inspect logs, or back up configuration directly from the host. Replace `$(pwd)/data` with any absolute path that suits your setup.
+
+The first boot runs `setupvol`, generates SSH keys, and ensures `/data` is owned by the `apache` user before starting httpd in the foreground.
+
+## Volume layout
+
+Everything that matters is under `/data`, meaning a single bind mount (or Docker volume) keeps stateful pieces safe:
+
+| Path (in container) | Typical contents | Host path when mounted |
+| --- | --- | --- |
+| `/data/localhost` | Virtual host roots (htdocs, etc.) | `…/data/localhost` |
+| `/data/etc` | Apache configuration files | `…/data/etc` |
+| `/data/log` | httpd logs (`access.log`, `error.log`, …) | `…/data/log` |
+| `/data/ssh` | Shared SSH keypair + config | `…/data/ssh` |
+
+The image rewires `/etc/apache2`, `/var/log/apache2`, `/var/www/.ssh`, and `/var/www/localhost` to symlink into `/data` so that Apache and your application always read/write from the persistent volume.
+
+## Helper commands
+
+Every helper lives in `/usr/local/bin` inside the container and is available via `docker exec mywebapp <command>`.
+
+| Command | Purpose |
+| --- | --- |
+| `pubkey` | Prints (and ensures the existence of) the shared SSH public key located at `/data/ssh/id_ed25519.pub`. |
+| `genkey [force|copy]` | Creates the SSH keypair if missing, optionally regenerates it (`force`) or copies it back to root’s home (`copy`). |
+| `fix-permission` | Recursively sets `/data` ownership to the `apache` user/group; run after manipulating files as root. |
+| `error-log` | Tails the current Apache `error.log` to your terminal. |
+| `clear-log` | Truncates `error.log` if it has grown too large. |
+| `install <apk packages…>` | Thin wrapper around `apk add --no-cache` for installing extra Alpine packages at runtime. |
+| `start` | Internal bootstrapper that runs `setupvol`, `genkey`, and `fix-permission` before Apache starts. |
+
+### SSH key management
+
+Private repositories usually require the container to expose its public key:
+
+```bash
+# Show the current public key
 docker exec mywebapp pubkey
-```
 
-### Generating a new SSH Key
-Whenever you need to generate a new ssh key, just execute (with container running):
-```
+# Regenerate (removes the old pair)
 docker exec mywebapp genkey force
-```
-Existing key will be removed and a new one will be generated.
 
-### Replacing root's SSH key
-If your replaced the SSH key outside docker changing files in `/local/path/ssh`, please replace it to root user using:
-```
+# Re-copy a host-edited key back to /root/.ssh
 docker exec mywebapp genkey copy
 ```
 
-## httpd
+## Working with Git
 
-### Config files
-Will be available at `/data/etc/` inside container or `/local/path/etc` outside it.
+- The `apache` and `root` users share the same SSH keypair, so PHP code can call Git directly if needed.
+- For initial deployments, it is often easiest to clone the application from the host via `docker exec`:
 
-### Logs
-Log files will be available at `/data/log` inside container or `/local/path/log` outside it.
-
-You can also view your error.log using:
-```
-docker exec mywebapp error-log
+```bash
+docker exec mywebapp git clone git@bitbucket.org:<user>/<repo>.git /data/localhost/htdocs
 ```
 
-Whenever you need to clear error.log, use:
-```
-docker exec mywebapp clear-log
-```
+- When you clone as `root`, run `docker exec mywebapp fix-permission` afterward so Apache can read and write the files without permission issues.
 
-### htdocs
-Your data will be stored at `/data/localhost` inside container or `/local/path/localhost` outside it.
+## Installing extra packages
 
-I recommend that you use git for any code changes.
+Need another PHP extension or system utility? Use the bundled helper (which delegates to `apk add`):
 
-## Using git
-Apache has the same SSH key as root, so you can use git directly from your PHP code.
-
-You can also use git directly from shell, mainly to make your initial clone. Just execute:
-
-```
-docker exec mywebapp git clone git@bitbucket.org:<yourUser>/<yourRep>.git
+```bash
+docker exec mywebapp install php-zip
 ```
 
-### Permissions
-When you do git directly from shell, it will be executed as root. So you can have trouble with apache's permission to access your files. To solve it:
-```
-docker exec mywebapp fix-permission
-```
+For package names, refer to the [Alpine Packages][alpine-pkg] index.
 
-## alpine packages
-If you need to install additional [alpine packages][alpine-pkg] you can execute:
-```
-docker exec mywebapp install <packageName>
-```
+## Docker Compose example
 
-# Security
-
-This software is designed for internal (intranet) use. Some security questions may have been undermine to make deployment easier. Please review some security questions before running it over internet:
-
-- Generated SSH key is without password;
-- Same SSH key is shared between root and apache user;
-- Remote key verification disabled for hosts github.com and bitbucket.org;
-- httpd.conf with default config;
-
-NOTE: *As this image designed for internal use, those modifications allow you to run and update your software in an automated way. Sharing SSH key with apache also allows your software to call git directly from your PHP code.*
-
-# Docker Compose
+Minimal stack (web + MariaDB) using Compose:
 
 ```yaml
 services:
@@ -153,10 +126,8 @@ services:
     image: mariadb
     command: --default-authentication-plugin=mysql_native_password --sql_mode="" --lower_case_table_names=1
     restart: always
-    expose:
-     - '3306'
     ports:
-     - 3306:3306
+      - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: areallystrongpassword
     volumes:
@@ -167,28 +138,53 @@ services:
 
   websys:
     image: renatomb/alpine-apache-php-git:php8.3
+    restart: always
     ports:
       - "80:80"
-    restart: always  
     volumes:
       - ./sistema/data:/data
       - ./sistema/conf:/etc/apache2/
     networks:
-      - websvcs      
+      - websvcs
     depends_on:
       - db
 
 networks:
- websvcs:
+  websvcs:
 ```
 
+Adjust the paths so they match your host layout. Copy `./sistema/conf` from a running container if you need to tweak Apache before committing changes back to version control.
 
-# License
+## Security considerations
+
+This image is designed for controlled networks (lab, intranet, on-site customer servers). Before exposing it to the public internet, review and harden the following defaults:
+
+- SSH keys are generated without passphrases and stored under `/data/ssh`.
+- The same SSH key is shared between `root` and `apache` for convenience.
+- Strict host key checking is disabled for `github.com` and `bitbucket.org` to simplify unattended clones.
+- Apache ships with the stock `httpd.conf` plus `AllowOverride All`; review modules, users, and TLS settings as needed.
+
+Nothing prevents you from hardening these items—feel free to bake your own derivative image, swap the `setupvol` logic, or manage keys externally if you require stricter controls.
+
+## Available Tags / PHP Versions
+
+Please check [alpine-apache-php-git repository tags](https://hub.docker.com/repository/docker/renatomb/alpine-apache-php-git/tags) to see all available PHP versions.
+
+## License
 
 Do whatever you want.
 
-# Inspired by
-This project was inspired by [gliderlabs/alpine] and [httpd].
+## About the author
+
+Renato Monteiro Batista is a Brazilian Computer Engineer, if you like this kind of project feel free to get in touch.
+
+- [Github](https://github.com/renatomb)
+- [Docker Hub](https://hub.docker.com/repositories/renatomb)
+- [Links tree](https://r3n4t0.cyou)
+
+## Credits
+
+Inspired by [gliderlabs/alpine] and [httpd], standing on the shoulders of the [Alpine Linux][alpine] community.
 
 [alpine]: http://alpinelinux.org/
 [docker]: https://www.docker.com/get-started
